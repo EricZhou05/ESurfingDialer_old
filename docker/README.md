@@ -95,7 +95,7 @@ chmod 600 /mnt/sata1-4/docker/esurfing-dialer/config/pw
 docker run -d --name esurfing-dialer --network host --restart=always \
   -v /mnt/sata1-4/docker/esurfing-dialer/diagnostics:/data/diagnostics \
   -v /mnt/sata1-4/docker/esurfing-dialer/config/pw:/run/secrets/pw:ro \
-  esurfing-dialer:diagnostic -u '<手机号' \
+  esurfing-dialer:diagnostic -u '<手机号>' \
   --password-file /run/secrets/pw --diagnostics-root /data/diagnostics
 ```
 
