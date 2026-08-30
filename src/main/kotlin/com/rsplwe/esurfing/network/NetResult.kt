@@ -2,8 +2,21 @@ package com.rsplwe.esurfing.network
 
 sealed class NetResult<out T : Any> {
 
-    data class Success<out T : Any>(val data: T) : NetResult<T>()
-    data class Error(val exception: String) : NetResult<Nothing>()
+    /** 2xx response handed to the caller; [exchange] is the sanitised exchange snapshot. */
+    data class Success<out T : Any>(
+        val data: T,
+        val exchange: HttpExchangeRecord? = null,
+    ) : NetResult<T>()
+
+    /**
+     * Classified failure: [exception] carries a stable machine-readable label
+     * (`HTTP_404`, `REDIRECT_LIMIT`, `EMPTY_BODY`, `TIMEOUT`, `DNS`, ...), never
+     * a raw stack trace; [exchange] mirrors [Success].
+     */
+    data class Error(
+        val exception: String,
+        val exchange: HttpExchangeRecord? = null,
+    ) : NetResult<Nothing>()
 
     override fun toString(): String {
         return when (this) {

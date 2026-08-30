@@ -1,21 +1,15 @@
 package com.rsplwe.esurfing.network
 
-import com.rsplwe.esurfing.States
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
-import org.junit.jupiter.api.Disabled
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * RED (TDD) — exposes the "non-2xx treated as success" defect.
- *
- * NetClient.post (lines 70-101) returns NetResult.Success whenever the HTTP
- * transport does not throw, so 4xx/5xx responses are currently misreported as
- * success. These tests assert the required contract: a non-2xx HTTP response
- * must be a NetResult.Error.
- *
- * Expected to FAIL until Todo 4 fixes the classification.
+ * Contract test — a non-2xx HTTP response must be a NetResult.Error, never
+ * NetResult.Success. Was written as a RED (TDD) test for Todo 1; the four
+ * error-status tests were @Disabled until Todo 4 implemented the classification.
+ * Now that Todo 4 is complete, they run and must pass (keep the 200 test green).
  */
 class NetClientHttpStatusTest {
 
@@ -31,7 +25,6 @@ class NetClientHttpStatusTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 4 fixes HTTP status classification")
     fun http500_isNotReportedAsSuccess() {
         withServer(500, "<html><body>Internal Server Error</body></html>") { url ->
             val result = post(url, "payload=1")
@@ -43,7 +36,6 @@ class NetClientHttpStatusTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 4 fixes HTTP status classification")
     fun http404_isNotReportedAsSuccess() {
         withServer(404, "<html><body>Not Found</body></html>") { url ->
             val result = post(url, "payload=1")
@@ -55,7 +47,6 @@ class NetClientHttpStatusTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 4 fixes HTTP status classification")
     fun http403_isNotReportedAsSuccess() {
         withServer(403, "<html><body>Forbidden</body></html>") { url ->
             val result = post(url, "payload=1")
@@ -67,7 +58,6 @@ class NetClientHttpStatusTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 4 fixes HTTP status classification")
     fun http503_isNotReportedAsSuccess() {
         withServer(503, "Service Unavailable") { url ->
             val result = post(url, "payload=1")
