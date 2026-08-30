@@ -82,3 +82,131 @@ java -jar client.jar -u ${DIALER_USER} -p ${DIALER_PASSWORD}
 ```bash
 ./gradlew shadowJar
 ```
+
+---
+
+## 构建与回滚
+
+### 1. 完整构建门（CI 与本地等价）
+
+CI（`.github/workflows/build.yml`）在 Java 23 下执行 `clean check shadowJar`，
+任一测试/check 失败即阻断 artifact 上传；上传物（测试报告、JAR、provenance）
+在收集前必须通过 canary/sensitive 扫描门。本地等价命令：
+
+```bash
+export JAVA_HOME=<你的 JDK 23 路径>
+export PATH=$JAVA_HOME/bin:$PATH
+
+# Gate 1：测试必须真实执行（clean 防 UP-TO-DATE 伪装）+ 产出 fat-jar
+./gradlew clean check shadowJar --no-daemon --console=plain
+
+# Gate 2：生成非敏感溯源元数据 provenance.json（commit SHA / JAR SHA-256 /
+# 依赖指纹 / 构建时间；-e 显式记录排除路径：sensitive/.omo/logs）
+bash scripts/ci-provenance.sh \
+  -o build/artifacts/provenance.json -j build/libs/*-all.jar \
+  -e sensitive -e .omo -e logs
+
+# Gate 3：上传内容安全扫描（命中 CAnary- / sensitive 路径 / 真实 KeyData 十六进
+# 制 / *.bin 现场 dump 任一即 exit 1 阻断）
+bash scripts/ci-artifact-check.sh \
+  build/artifacts/provenance.json build/reports/tests/test \
+  build/test-results/test build/libs/*-all.jar
+```
+
+`provenance.json` 字段：`commitSha/commitShortSha/gitDescribe`、`jarFile/jarSha256`、
+`dependencyFingerprintSha256`、`buildTimestampIso`、`javaVersion/gradleVersion`、
+`excludedPaths`。产物可完全溯源：JAR 或部署物随时可与 provenance 对账。
+
+### 2. 版本命名与 baseline 概念
+
+| 名称 | 含义 | tag / 文件 |
+| --- | --- | --- |
+| `baseline` | 修复前版本（本仓库生产逻辑当前即修复前基线；Git `018952b` 为准） | 镜像 `esurfing-dialer:baseline`；JAR `client.jar`（保留副本 `client.jar.baseline-<短SHA>`） |
+| `diagnostic` | 诊断线产物（当前 main，含 Todo 8 容器包装） | 镜像 `esurfing-dialer:diagnostic` |
+| `repair` | 未来修复版本（Todo 12 之后） | 建议 tag `esurfing-dialer:repair` |
+
+每次构建记录三样东西：Git SHA（短 12 位）、JAR SHA-256、`provenance.json`。
+**回滚 = 把部署物换回 baseline 版本**；回滚前后的版本以 SHA 对账，而不是凭 tag 名。
+
+### 3. 校验 hash 的命令
+
+```bash
+# JAR 与 provenance 对账
+sha256sum build/libs/ESurfingDialer-*-all.jar
+python3 -c "import json;print(json.load(open('build/artifacts/provenance.json'))['jarSha256'])"
+
+# 一条命令复验（provenance 的 jarSha256 与文件一致才算数）
+python3 - <<'PY'
+import json,sys,os,hashlib
+m=json.load(open('build/artifacts/provenance.json'))
+h=hashlib.sha256(open(m['jarFile'],'rb').read()).hexdigest()
+print('OK  '+m['jarFile']) if h==m['jarSha256'] else (print('MISMATCH '+m['jarFile']),sys.exit(1))
+print('commit='+m['commitShortSha'])
+PY
+
+# 现场证据（<runId>/manifest.json）的逐文件 SHA-256 复验见 docker/README.md 第 5 节
+```
+
+### 4. Docker 回滚（推荐生产路径）
+
+核心原则：**回滚只换镜像/容器，绝不触碰 bind mount 的证据目录**（
+`/data/diagnostics` 指向数据盘 sda4 的那部分保持原样）。容器每启动一次都在
+证据根新建独立 `<runId>/` 目录，回滚不会覆盖、删除或修改任何旧 evidence。
+
+```bash
+# 0) 回滚前先保存当前有效镜像（防 tag 覆盖丢引用）
+docker save esurfing-dialer:baseline | gzip > esurfing-dialer-baseline.tar.gz
+
+# 1) 发布新版本时把当前 tag 重新指向（示例：diagnostic 成为新 baseline）
+docker tag esurfing-dialer:diagnostic esurfing-dialer:baseline
+#    或修复后：docker tag esurfing-dialer:repair esurfing-dialer:baseline
+
+# 2) 回滚 = 用旧镜像重新 run（同一 host 网络 / 同一证据 bind mount / 同一 secret）
+docker run -d --name esurfing-dialer --network host \
+  -v /mnt/sata1-4/docker/esurfing-dialer/diagnostics:/data/diagnostics \
+  -v /mnt/sata1-4/docker/esurfing-dialer/config/pw:/run/secrets/pw:ro \
+  esurfing-dialer:baseline -u '<手机号>' \
+  --password-file /run/secrets/pw --diagnostics-root /data/diagnostics
+docker stop -t 60 esurfing-dialer          # SIGTERM → 优雅 flush → manifest 落盘
+
+# 3) 离线设备：先 docker load 旧 tar 再按第 2 步 run
+docker load -i esurfing-dialer-baseline.tar.gz
+docker images | grep esurfing-dialer       # 核对 IMAGE ID 与开发机一致
+```
+
+回滚后验证：`docker inspect` 的 Env/Cmd 无凭据；`provenance.json` 的
+`commitSha/jarSha256` 与容器内 `client.jar` 实际 SHA 一致：
+
+```bash
+docker exec esurfing-dialer sh -c 'sha256sum /app/client.jar'
+```
+
+### 5. JAR 回滚（无 Docker 的裸 JVM 部署）
+
+```bash
+# 保留旧 jar 与当前 jar，替换后重启
+cp /app/client.jar /app/client.jar.diagnostic            # 备份当前版本
+cp /app/client.jar.baseline-<短SHA> /app/client.jar      # 用保存的旧版覆盖
+sha256sum /app/client.jar                                # 与 provenance 对账
+# 重启服务（systemd/supervisor/脚本均可），确认进程以新替换的 jar 启动
+```
+
+### 6. 回滚不覆盖 evidence（强制契约）
+
+- 证据根（`/data/diagnostics` 的 bind mount）**不随回滚**：不删目录、不重写旧
+  `<runId>/`、不清 manifest。回滚前后宿主机侧 `sha256sum -c`（docker/README
+  第 5 节清单）对旧 run 逐文件复验一字不差。
+- 诊断目录向后兼容：回滚回旧版本应用仍按同一 `<runId>/redacted/` + `manifest.json`
+  结构写入，新运行只新增新 runId；旧证据 hash 不变（`RollbackEvidenceEquivalenceTest`
+  在本地/CI 锁死该契约：同一挂载目录 baseline→diagnostic→rollback 三轮，
+  首轮 evidence 的文件 SHA-256 目录清单逐字节不变）。
+- `sensitive/`、现场 evidence、真实 fixture、canary 值绝不进 Git / CI artifact /
+  文档；CI 上传前由 `ci-artifact-check.sh` 强制阻断开上传。
+
+### 7. CI artifact 安全门（上传前强制）
+
+`build.yml` 的 3 道门：① `clean check shadowJar` 任一失败即停；② provenance
+生成并记录排除路径；③ `ci-artifact-check.sh` 校验上传内容——命中
+`sensitive` 路径组件、`CAnary-` 哨兵、未脱敏 `xxx-xxxx-xxxx` 号码、真实
+`KeyData` key/IV 十六进制、`*.bin`/`algo_dump_*` 现场 dump 即 exit 1。
+`if: failure()` 步骤汇总失败原因；**失败时上传步骤不执行**。

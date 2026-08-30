@@ -12,13 +12,58 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+
+      - name: Set up JDK 23
+        uses: actions/setup-java@v4
         with:
           java-version: '23'
           distribution: 'zulu'
-      - name: Build with Gradle
-        run: ./gradlew shadowJar
-      - uses: actions/upload-artifact@v4
+
+      # Gate 1: tests + fat jar. `clean` guarantees the tests actually run —
+      # never an UP-TO-DATE no-op. Any check failure here stops every later
+      # step, so artifacts are blocked from being uploaded by design.
+      - name: Clean check shadowJar (tests must really run, never UP-TO-DATE)
+        run: ./gradlew clean check shadowJar --no-daemon --console=plain
+
+      # Gate 2: provenance metadata (Git SHA / JAR SHA-256 / dependency
+      # fingerprint). Non-sensitive fields only; `-e` records what the upload
+      # explicitly excludes (sensitive/, .omo, logs).
+      - name: Generate provenance metadata
+        run: |
+          bash scripts/ci-provenance.sh \
+            -o build/artifacts/provenance.json \
+            --jar build/libs/*-all.jar \
+            -e sensitive -e .omo -e logs
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      # Gate 3: canary/sensitive/site-dump safety scan on everything that is
+      # about to be uploaded. Exit 1 on any hit blocks the upload step below.
+      - name: Verify artifacts are free of canary / sensitive / site-dump content
+        run: |
+          bash scripts/ci-artifact-check.sh \
+            build/artifacts/provenance.json \
+            build/reports/tests/test \
+            build/test-results/test \
+            build/libs/*-all.jar
+
+      # Upload only after ALL gates passed (any earlier failure skips this step).
+      - name: Upload test report, JAR and provenance
+        uses: actions/upload-artifact@v4
         with:
           name: ESurfingDialer-artifact
-          path: build/libs/
+          path: |
+            build/reports/tests/test
+            build/test-results/test
+            build/libs/*-all.jar
+            build/artifacts/provenance.json
+
+      # Failure summary: runs only when a previous step failed, and artifact
+      # collection stays blocked (nothing is uploaded on failure).
+      - name: Report failure reason (artifacts blocked upstream)
+        if: failure()
+        run: |
+          echo "::error::One or more build gates failed; artifacts were NOT uploaded (blocked by design)."
+          echo "Check the failing step above; a canary/sensitive/site-dump hit in upload content "
+          echo "or a failing test/check stops the pipeline before actions/upload-artifact runs."
