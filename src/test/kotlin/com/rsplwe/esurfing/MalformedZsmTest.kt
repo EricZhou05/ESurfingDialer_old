@@ -3,24 +3,21 @@ package com.rsplwe.esurfing
 import com.rsplwe.esurfing.fixture.FixtureLoader
 import com.rsplwe.esurfing.fixture.TestLogAppender
 import org.apache.log4j.Logger
-import org.junit.jupiter.api.Disabled
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * RED (TDD) — exposes malformed-ZSM handling boundaries (Session.load,
- * Session.kt:23-58).
+ * Malformed-ZSM handling boundaries (Session.load, fixed by Todo 5).
  *
- * Already-correct boundaries (must stay green):
+ * Boundary tests (must stay green):
  *  - payload shorter than 4 bytes is rejected without crashing
  *  - keyLen/algoIdLen overflow is rejected without crashing
  *
- * Current defects (must go red until Todo 5):
- *  - unknown Algo-ID falls into the catch-all and writes the raw ZSM to
- *    `algo_dump_*.bin` in the current working directory (raw secret leak +
- *    cwd side effect) and logs the dump path to ordinary logs.
+ * Todo 5 fixes (re-enabled, must stay green):
+ *  - unknown Algo-ID must NOT write the raw ZSM to `algo_dump_*.bin` in the
+ *    working directory (raw secret leak + cwd side effect) nor log the path.
  */
 class MalformedZsmTest {
 
@@ -51,7 +48,6 @@ class MalformedZsmTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 5 stops dumping raw ZSM to cwd")
     fun unknownAlgoId_mustNotWriteDumpFileToCwd() {
         val before = algoDumpFiles()
         Session.initialize(FixtureLoader.bytes("zsm/malformed-unknown-algo.zsm"))
@@ -63,7 +59,6 @@ class MalformedZsmTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 5 stops advertising the dump path")
     fun unknownAlgoId_mustNotLogDumpPath() {
         val appender = TestLogAppender()
         Logger.getRootLogger().addAppender(appender)

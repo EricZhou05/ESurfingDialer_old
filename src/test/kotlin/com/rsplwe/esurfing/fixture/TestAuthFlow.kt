@@ -5,6 +5,7 @@ import com.rsplwe.esurfing.Options
 import com.rsplwe.esurfing.Session
 import com.rsplwe.esurfing.States
 import com.rsplwe.esurfing.cipher.CipherFactory
+import com.rsplwe.esurfing.cipher.CipherLookup
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.Buffer
@@ -38,7 +39,9 @@ object TestAuthFlow {
         ticketXml: String,
         loginXml: String,
     ): AuthFlowResult {
-        val cipher = CipherFactory.getInstance(FIXTURE_ALGO_ID)
+        val lookup = CipherFactory.getInstance(FIXTURE_ALGO_ID)
+        check(lookup is CipherLookup.Found) { "fixture Algo-Id must resolve" }
+        val cipher = lookup.cipher
         val server = MockWebServer()
         val zsmBuffer = Buffer().apply { write(zsm) }
         server.enqueue(MockResponse().setBody(zsmBuffer))
