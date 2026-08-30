@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Unknown business code on login: the response is
+     well-formed but the server rejected the credentials. -->
+<response>
+    <result>error:bad-password</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>30</keep-retry>
+</response>

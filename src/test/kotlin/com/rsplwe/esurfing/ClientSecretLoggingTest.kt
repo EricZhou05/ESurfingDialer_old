@@ -3,7 +3,6 @@ package com.rsplwe.esurfing
 import com.rsplwe.esurfing.fixture.CanarySecrets
 import com.rsplwe.esurfing.fixture.FixtureLoader
 import com.rsplwe.esurfing.fixture.TestAuthFlow
-import org.junit.jupiter.api.Disabled
 import kotlin.test.Test
 import kotlin.test.assertFalse
 
@@ -39,7 +38,6 @@ class ClientSecretLoggingTest {
     private val zsm = FixtureLoader.bytes("zsm/valid.zsm")
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 6 stops printing the SMS code")
     fun authorization_mustNotPrintSmsCodeToStdout() {
         val options = Options(
             loginUser = CanarySecrets.CANARY_USER_DEMO,
@@ -54,7 +52,6 @@ class ClientSecretLoggingTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 6 stops logging the ticket")
     fun authorization_mustNotLogTicket() {
         val options = Options(
             loginUser = CanarySecrets.CANARY_USER_DEMO,

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. ticket is present but empty; a blank session
+     credential must never be accepted. -->
+<response>
+    <result>success</result>
+    <ticket></ticket>
+</response>

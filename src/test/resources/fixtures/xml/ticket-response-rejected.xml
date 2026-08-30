@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Unknown business code: the server answered, but its
+     result is not "success", so the response is a business rejection. -->
+<response>
+    <result>fail</result>
+    <ticket>FIXTURE_TICKET_REJECTED</ticket>
+</response>

@@ -1,5 +1,6 @@
 package com.rsplwe.esurfing
 
+import com.rsplwe.esurfing.auth.AuthState
 import com.rsplwe.esurfing.utils.randomMACAddress
 import java.util.UUID
 
@@ -22,6 +23,14 @@ object States {
     var authUrl = ""
     var extraCfgUrl = HashMap<String, String>()
     var isLogged = false
+
+    /**
+     * Current lifecycle state of the authentication flow (Todo 6). `isLogged`
+     * mirrors `authState == AuthState.LOGGED` for the public API; the state
+     * machine drives both.
+     */
+    @Volatile
+    var authState: AuthState = AuthState.UNINITIALIZED
 
     fun refreshStates() {
         this.clientId = UUID.randomUUID().toString().lowercase()

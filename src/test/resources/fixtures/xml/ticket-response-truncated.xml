@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. The ticket element is cut off mid-tag, so the
+     response carries no usable ticket value after lenient parsing. -->
+<response><result>success</result><ticket>

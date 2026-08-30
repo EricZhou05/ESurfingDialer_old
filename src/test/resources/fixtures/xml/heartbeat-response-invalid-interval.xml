@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Heartbeat interval is present but EMPTY: a missing
+     interval must degrade the session as a typed failure, never propagate "". -->
+<response>
+    <result>success</result>
+    <interval></interval>
+</response>

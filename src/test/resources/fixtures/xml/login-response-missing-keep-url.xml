@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. keep-url is absent; login must fail as a typed
+     missing-field violation and never mark the session logged. -->
+<response>
+    <result>success</result>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>30</keep-retry>
+</response>

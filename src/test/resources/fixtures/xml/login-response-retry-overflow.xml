@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. keep-retry overflows Long: toLongOrNull() gives
+     null and the contract rejects it as a typed failure (never a crash). -->
+<response>
+    <result>success</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>99999999999999999999</keep-retry>
+</response>

@@ -1,56 +1,50 @@
 package com.rsplwe.esurfing
 
-import com.rsplwe.esurfing.States.isRunning
-import com.rsplwe.esurfing.States.ticket
-import com.rsplwe.esurfing.network.NetResult
-import com.rsplwe.esurfing.network.post
-import com.rsplwe.esurfing.utils.ConnectivityStatus.*
-import com.rsplwe.esurfing.utils.checkVerifyCodeStatus
+import com.rsplwe.esurfing.auth.AuthEvent
+import com.rsplwe.esurfing.auth.AuthRequestKind
+import com.rsplwe.esurfing.auth.AuthState
+import com.rsplwe.esurfing.auth.AuthStateMachine
+import com.rsplwe.esurfing.diagnostics.DiagnosticStage
+import com.rsplwe.esurfing.protocol.AuthSmsOutcome
+import com.rsplwe.esurfing.protocol.LoginParseResult
+import com.rsplwe.esurfing.protocol.ProtocolLimits
+import com.rsplwe.esurfing.protocol.TicketParseResult
+import com.rsplwe.esurfing.utils.ConnectivityStatus.REQUIRE_AUTHORIZATION
+import com.rsplwe.esurfing.utils.ConnectivityStatus.REQUEST_ERROR
+import com.rsplwe.esurfing.utils.ConnectivityStatus.SUCCESS
 import com.rsplwe.esurfing.utils.detectConfig
-import com.rsplwe.esurfing.utils.getTime
-import com.rsplwe.esurfing.utils.getVerifyCode
 import org.apache.log4j.Logger
-import org.jsoup.Jsoup
-import org.jsoup.parser.Parser
 import java.lang.Thread.sleep
 
+/**
+ * Orchestrates the authentication lifecycle. The protocol steps (ZSM/ticket/
+ * login/heartbeat/term exchanges and SMS handling) live in [ClientAuthSteps];
+ * this class owns the run loop, the state machine and the public `term()`
+ * contract.
+ */
 class Client(private val options: Options) {
 
     private val logger: Logger = Logger.getLogger(Client::class.java)
-    private var keepUrl = ""
-    private var termUrl = ""
-    private var keepRetry = ""
+    private val steps = ClientAuthSteps(this, options)
+
+    // Only ever assigned from a validated login/heartbeat parse (1..3600) or
+    // the protocol default, so the `.toLong()` in run() cannot throw.
+    internal var keepUrl = ""
+    internal var termUrl = ""
+    internal var keepRetry = ProtocolLimits.DEFAULT_KEEP_RETRY_SECONDS.toString()
+    internal var terminated = false
 
     @Volatile
     var tick: Long = 0
 
     fun run() {
-        while (isRunning) {
-            val networkStatus = detectConfig()
-            when (networkStatus) {
-                SUCCESS -> {
-                    if (Session.isInitialized() && States.isLogged) {
-                        try {
-                            if ((System.currentTimeMillis() - tick) >= (keepRetry.toLong() * 1000)) {
-                                logger.info("Send Keep Packet")
-                                heartbeat(ticket)
-                                logger.info("Next Retry: $keepRetry")
-                                tick = System.currentTimeMillis()
-                            }
-                        } catch (_: Exception) {
-                            States.isLogged = false
-                        }
-                    } else {
-                        logger.info("The network has been connected.")
-                    }
-                    sleep(1000)
-                }
-
+        while (States.isRunning) {
+            when (detectConfig()) {
+                SUCCESS -> tickIfDue()
                 REQUIRE_AUTHORIZATION -> {
                     States.isLogged = false
                     authorization()
                 }
-
                 REQUEST_ERROR -> {
                     logger.error("Request Error")
                     sleep(5000)
@@ -59,178 +53,120 @@ class Client(private val options: Options) {
         }
     }
 
+    private fun tickIfDue() {
+        if (Session.isInitialized() && States.isLogged && isAllowed(AuthRequestKind.HEARTBEAT)) {
+            val intervalMs = keepRetry.toLong() * 1000
+            if ((System.currentTimeMillis() - tick) >= intervalMs) {
+                logger.info("Send Keep Packet")
+                heartbeat(States.ticket)
+                logger.info("Next Retry: $keepRetry")
+                tick = System.currentTimeMillis()
+            }
+        } else {
+            logger.info("The network has been connected.")
+        }
+        sleep(1000)
+    }
+
     private fun authorization() {
-        val code = options.smsCode.ifBlank { checkSMSVerify() }
-        println("SMS Code is: $code")
+        if (!States.isRunning) {
+            logger.warn("Authorization refused: the client is shutting down.")
+            return
+        }
+        if (!apply(AuthEvent.AUTH_ATTEMPT_STARTED)) {
+            logger.warn("Authorization refused in state ${States.authState}.")
+            return
+        }
+        clearAttemptState()
+
+        val smsOutcome = steps.resolveSmsOutcome()
+        if (smsOutcome is AuthSmsOutcome.QueryFailed) {
+            logger.error("SMS verification query failed: ${smsOutcome.safeSummary}")
+            abortAuthorization()
+            return
+        }
+        val smsCode = (smsOutcome as? AuthSmsOutcome.CodeProvided)?.code.orEmpty()
 
         States.refreshStates()
-        initSession()
+        States.ticket = ""
 
-        if (!Session.isInitialized()){
-            logger.error("Unable to find algorithm implementation, please restart the application or try version 1.8.0 or below.")
-            logger.error("Release: https://github.com/Rsplwe/ESurfingDialer/releases")
-            isRunning = false
+        if (steps.initSession() is SessionStep.Failed) {
+            logger.error("Session initialization failed.")
+            abortAuthorization()
+            return
+        }
+        if (!apply(AuthEvent.SESSION_INITIALIZED)) {
+            logger.error("Session initialization refused in state ${States.authState}.")
+            abortAuthorization()
             return
         }
 
         logger.info("Client IP: ${States.userIp}")
         logger.info("AC IP: ${States.acIp}")
 
-        ticket = getTicket()
-        logger.info("Ticket: $ticket")
-
-        login(code)
-        if (keepUrl.isEmpty()) {
-            logger.error("KeepUrl is empty.")
-            Session.free()
-            isRunning = false
-            return
-        }
-        tick = System.currentTimeMillis()
-        States.isLogged = true
-        logger.info("The login has been authorized.")
-    }
-
-    private fun checkSMSVerify(): String {
-        if (checkVerifyCodeStatus(options.loginUser) && getVerifyCode(options.loginUser)) {
-            logger.info("This login requires a SMS verification code.")
-            while (true) {
-                print("Input Code: ")
-                val input = readlnOrNull()
-                if (input != null) {
-                    val code = input.trim()
-                    if (code.isNotBlank()) {
-                        return code
+        when (val ticketRaw = steps.fetchTicket()) {
+            is TicketParseResult.Success -> {
+                States.ticket = ticketRaw.ticket
+                when (val login = steps.performLogin(smsCode)) {
+                    is LoginParseResult.Success -> {
+                        steps.applyLoginUrls(login)
+                        tick = System.currentTimeMillis()
+                        if (!apply(AuthEvent.LOGIN_SUCCESS)) {
+                            logger.error("Login success refused in state ${States.authState}.")
+                            abortAuthorization()
+                            return
+                        }
+                        States.isLogged = true
+                        logger.info("The login has been authorized.")
+                    }
+                    is LoginParseResult.Failure -> {
+                        steps.recordContractFailure(DiagnosticStage.LOGIN, login.reason, login.safeSummary)
+                        logger.error("Login failed: ${login.safeSummary}")
+                        abortAuthorization()
                     }
                 }
             }
-        }
-        return ""
-    }
-
-    private fun initSession() {
-        when (val result = post(States.ticketUrl, States.algoId)) {
-            is NetResult.Success -> {
-                Session.initialize(result.data.bytes())
-            }
-
-            is NetResult.Error -> {
-                error("Error: ${result.exception}")
-            }
-        }
-    }
-
-    private fun getTicket(): String {
-        val payload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <request>
-                <user-agent>${Constants.USER_AGENT}</user-agent>
-                <client-id>${States.clientId}</client-id>
-                <local-time>${getTime()}</local-time>
-                <host-name>${Constants.HOST_NAME}</host-name>
-                <ipv4>${States.userIp}</ipv4>
-                <ipv6></ipv6>
-                <mac>${States.macAddress}</mac>
-                <ostag>${Constants.HOST_NAME}</ostag>
-                <gwip>${States.acIp}</gwip>
-            </request>
-        """.trimIndent()
-        when (val result = post(States.ticketUrl, Session.encrypt(payload))) {
-            is NetResult.Success -> {
-                val data = Session.decrypt(result.data.string())
-                val doc = Jsoup.parse(data, Parser.xmlParser())
-                return doc.getElementsByTag("ticket").first()?.text() ?: ""
-            }
-
-            is NetResult.Error -> {
-                error("Error: ${result.exception}")
-            }
-        }
-    }
-
-
-    private fun login(code: String = "") {
-        val verify = if (code.isBlank()) "" else "<verify>${code}</verify>"
-        val payload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <request>
-                <user-agent>${Constants.USER_AGENT}</user-agent>
-                <client-id>${States.clientId}</client-id>
-                <ticket>${ticket}</ticket>
-                <local-time>${getTime()}</local-time>
-                <userid>${options.loginUser}</userid>
-                <passwd>${options.loginPassword}</passwd>
-                $verify
-            </request>
-        """.trimIndent()
-        when (val result = post(States.authUrl, Session.encrypt(payload))) {
-            is NetResult.Success -> {
-                val data = Session.decrypt(result.data.string())
-                val doc = Jsoup.parse(data, Parser.xmlParser())
-
-                keepUrl = doc.getElementsByTag("keep-url").first()?.text() ?: ""
-                termUrl = doc.getElementsByTag("term-url").first()?.text() ?: ""
-                keepRetry = doc.getElementsByTag("keep-retry").first()?.text() ?: ""
-
-                logger.info("Keep Url: $keepUrl")
-                logger.info("Term Url: $termUrl")
-                logger.info("Keep Retry: $keepRetry")
-            }
-
-            is NetResult.Error -> {
-                error("Error: ${result.exception}")
-            }
-        }
-    }
-
-    private fun heartbeat(ticket: String) {
-        val payload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <request>
-                <user-agent>${Constants.USER_AGENT}</user-agent>
-                <client-id>${States.clientId}</client-id>
-                <local-time>${getTime()}</local-time>
-                <host-name>${Constants.HOST_NAME}</host-name>
-                <ipv4>${States.userIp}</ipv4>
-                <ticket>${ticket}</ticket>
-                <ipv6></ipv6>
-                <mac>${States.macAddress}</mac>
-                <ostag>${Constants.HOST_NAME}</ostag>
-            </request>
-        """.trimIndent()
-        when (val result = post(keepUrl, Session.encrypt(payload))) {
-            is NetResult.Success -> {
-                val data = Session.decrypt(result.data.string())
-                val doc = Jsoup.parse(data, Parser.xmlParser())
-                keepRetry = doc.getElementsByTag("interval").first()?.text() ?: ""
-            }
-
-            is NetResult.Error -> {
-                error("Error: ${result.exception}")
+            is TicketParseResult.Failure -> {
+                steps.recordContractFailure(DiagnosticStage.TICKET, ticketRaw.reason, ticketRaw.safeSummary)
+                logger.error("Ticket failed: ${ticketRaw.safeSummary}")
+                abortAuthorization()
             }
         }
     }
 
     fun term() {
-        val payload = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <request>
-                <user-agent>${Constants.USER_AGENT}</user-agent>
-                <client-id>${States.clientId}</client-id>
-                <local-time>${getTime()}</local-time>
-                <host-name>${Constants.HOST_NAME}</host-name>
-                <ipv4>${States.userIp}</ipv4>
-                <ticket>${ticket}</ticket>
-                <ipv6></ipv6>
-                <mac>${States.macAddress}</mac>
-                <ostag>${Constants.HOST_NAME}</ostag>
-            </request>
-        """.trimIndent()
-        when (val result = post(termUrl, Session.encrypt(payload))) {
-            is NetResult.Success -> {}
-            is NetResult.Error -> {
-                error("Error: ${result.exception}")
-            }
-        }
+        steps.performTerm()
+    }
+
+    fun heartbeat(ticket: String) {
+        steps.heartbeat(ticket)
+    }
+
+    internal fun apply(event: AuthEvent): Boolean {
+        val next = AuthStateMachine.next(States.authState, event) ?: return false
+        States.authState = next
+        return true
+    }
+
+    internal fun isAllowed(kind: AuthRequestKind): Boolean = AuthStateMachine.canIssue(States.authState, kind)
+
+    internal fun transitionTo(state: AuthState) {
+        States.authState = state
+    }
+
+    internal fun clearAttemptState() {
+        States.isLogged = false
+        States.ticket = ""
+        keepUrl = ""
+        termUrl = ""
+        keepRetry = ProtocolLimits.DEFAULT_KEEP_RETRY_SECONDS.toString()
+        terminated = false
+        Session.free()
+    }
+
+    internal fun abortAuthorization() {
+        Session.free()
+        States.isLogged = false
+        States.isRunning = false
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Heartbeat interval is ZERO: must be a typed
+     invalid-value failure (busy-loop protection). -->
+<response>
+    <result>success</result>
+    <interval>0</interval>
+</response>

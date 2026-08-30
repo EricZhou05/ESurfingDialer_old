@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Two ticket elements: the contract takes the first
+     non-blank occurrence deterministically. -->
+<response>
+    <result>success</result>
+    <ticket>FIXTURE_TICKET_FIRST_DUPLICATE</ticket>
+    <ticket>FIXTURE_TICKET_SECOND_DUPLICATE</ticket>
+</response>

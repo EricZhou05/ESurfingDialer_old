@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. keep-retry parses but exceeds the anti-high-frequency
+     cap (3600s), so it is a typed out-of-range failure. -->
+<response>
+    <result>success</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>99999</keep-retry>
+</response>

@@ -4,6 +4,8 @@ import cn.yescallop.fluenturi.Uri
 import com.google.gson.Gson
 import com.rsplwe.esurfing.Constants
 import com.rsplwe.esurfing.States
+import com.rsplwe.esurfing.diagnostics.BusinessErrorCode
+import com.rsplwe.esurfing.diagnostics.BusinessResult
 import com.rsplwe.esurfing.diagnostics.DiagnosticStage
 import com.rsplwe.esurfing.diagnostics.HttpErrorCode
 import com.rsplwe.esurfing.diagnostics.HttpResult
@@ -12,6 +14,7 @@ import com.rsplwe.esurfing.diagnostics.ProtocolResult
 import com.rsplwe.esurfing.model.RequireVerificate
 import com.rsplwe.esurfing.model.ResponseRequireVerificate
 import com.rsplwe.esurfing.network.NetDiagnostics
+import com.rsplwe.esurfing.network.NetErrorCode
 import com.rsplwe.esurfing.network.RedirectInterceptor
 import com.rsplwe.esurfing.network.RedirectProtocolException
 import com.rsplwe.esurfing.network.apiClient
@@ -20,6 +23,8 @@ import com.rsplwe.esurfing.network.classifyFailure
 import com.rsplwe.esurfing.network.createHttpClient
 import com.rsplwe.esurfing.network.elapsedMillis
 import com.rsplwe.esurfing.network.safeUrlOf
+import com.rsplwe.esurfing.protocol.SmsQueryFailure
+import com.rsplwe.esurfing.protocol.SmsVerifyOutcome
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -106,6 +111,7 @@ private fun classifyPortalBody(content: String, stage: DiagnosticStage, duration
     States.authUrl = doc.getElementsByTag("auth-url").first()?.text() ?: ""
     States.ticketUrl = doc.getElementsByTag("ticket-url").first()?.text() ?: ""
 
+    States.extraCfgUrl = HashMap()
     doc.getElementsByTag("funcfg").first()?.children()?.forEach {
         if ((it.attribute("enable")?.value ?: "") == "1"
             && (it.attribute("url")?.value ?: "").isNotEmpty()
@@ -138,24 +144,35 @@ private fun classifyPortalBody(content: String, stage: DiagnosticStage, duration
     return ConnectivityStatus.REQUIRE_AUTHORIZATION
 }
 
-fun checkVerifyCodeStatus(username: String): Boolean {
+fun checkVerifyCodeStatus(username: String): SmsVerifyOutcome {
     return requestVerifyCode(username, "QueryVerificateCodeStatus", "11062000")
 }
 
-fun getVerifyCode(username: String): Boolean {
+fun getVerifyCode(username: String): SmsVerifyOutcome {
     return requestVerifyCode(username, "QueryAuthCode", "0")
 }
 
-fun requestVerifyCode(username: String, type: String, success: String): Boolean {
+/**
+ * Queries one SMS endpoint and returns a typed [SmsVerifyOutcome]. "Needs a
+ * code" ([RequiresVerification]), "no code needed" ([NotRequired]) and "query
+ * failed" ([QueryFailed]) are three distinct verdicts — never a collapsed
+ * `false`. The response is closed in all paths and failures only record a
+ * non-secret classification.
+ */
+fun requestVerifyCode(username: String, type: String, success: String): SmsVerifyOutcome {
     val url = States.extraCfgUrl[type]
-    if (url.isNullOrEmpty()) return false
+    if (url.isNullOrEmpty()) {
+        val summary = "sms_endpoint_missing:$type"
+        NetDiagnostics.record(DiagnosticStage.SMS, BusinessResult.Failure(BusinessErrorCode.SMS_QUERY_FAILED, summary))
+        return SmsVerifyOutcome.QueryFailed(SmsQueryFailure.ENDPOINT_MISSING, summary)
+    }
     val currentTimeMillis = System.currentTimeMillis().toString()
     val body = Gson().toJson(
         RequireVerificate(
             schoolId = States.schoolId,
             username = username,
             timestamp = currentTimeMillis,
-            authenticator = DigestUtils.md5Hex(States.schoolId + currentTimeMillis + Constants.AUTH_KEY).uppercase()
+            authenticator = DigestUtils.md5Hex(States.schoolId + currentTimeMillis + Constants.AUTH_KEY).uppercase(),
         )
     ).toRequestBody("application/json".toMediaTypeOrNull())
     val request = Request.Builder()
@@ -165,18 +182,60 @@ fun requestVerifyCode(username: String, type: String, success: String): Boolean 
         .url(url)
         .post(body)
 
-    try {
+    val startNanos = System.nanoTime()
+    return try {
         val response = apiClient.newCall(request.build()).execute()
+        val durationMs = elapsedMillis(startNanos)
         try {
-            if (!response.isSuccessful) return false
-            val model = Gson().fromJson(response.body?.string(), ResponseRequireVerificate::class.java)
-            if (model.resCode == success) return true
+            if (!response.isSuccessful) {
+                val summary = NetErrorCode.http(response.code)
+                NetDiagnostics.record(
+                    DiagnosticStage.SMS,
+                    HttpResult.Failure(HttpErrorCode.NON_2XX, summary),
+                    durationMs,
+                )
+                SmsVerifyOutcome.QueryFailed(SmsQueryFailure.HTTP_ERROR, summary)
+            } else {
+                classifySmsBody(response.body?.string(), success, durationMs)
+            }
         } finally {
             response.close()
         }
     } catch (e: Throwable) {
-        logger.error(e.stackTraceToString())
-        return false
+        classifyFailure(e, DiagnosticStage.SMS, safeUrlOf(url), elapsedMillis(startNanos))
+        val summary = when (e) {
+            is java.net.SocketTimeoutException -> NetErrorCode.TIMEOUT
+            is java.net.UnknownHostException -> NetErrorCode.DNS
+            is java.net.ConnectException -> NetErrorCode.CONNECTION_REFUSED
+            is java.io.IOException -> NetErrorCode.IO
+            else -> NetErrorCode.UNKNOWN
+        }
+        logger.error("Portal SMS verify failed: $summary")
+        SmsVerifyOutcome.QueryFailed(SmsQueryFailure.TRANSPORT, summary)
     }
-    return false
+}
+
+private fun classifySmsBody(raw: String?, success: String, durationMs: Long): SmsVerifyOutcome {
+    if (raw.isNullOrEmpty()) {
+        val summary = "sms_empty_body"
+        NetDiagnostics.record(DiagnosticStage.SMS, BusinessResult.Failure(BusinessErrorCode.SMS_QUERY_FAILED, summary), durationMs)
+        return SmsVerifyOutcome.QueryFailed(SmsQueryFailure.MALFORMED_RESPONSE, summary)
+    }
+    val model = try {
+        Gson().fromJson(raw, ResponseRequireVerificate::class.java)
+    } catch (e: Exception) {
+        null
+    }
+    val resCode = model?.resCode
+    if (resCode == null) {
+        val summary = "sms_response_malformed"
+        NetDiagnostics.record(DiagnosticStage.SMS, BusinessResult.Failure(BusinessErrorCode.SMS_QUERY_FAILED, summary), durationMs)
+        return SmsVerifyOutcome.QueryFailed(SmsQueryFailure.MALFORMED_RESPONSE, summary)
+    }
+    if (resCode == success) {
+        NetDiagnostics.record(DiagnosticStage.SMS, BusinessResult.Failure(BusinessErrorCode.REQUIRES_SMS, "sms_requires_verification"), durationMs)
+        return SmsVerifyOutcome.RequiresVerification
+    }
+    NetDiagnostics.record(DiagnosticStage.SMS, HttpResult.Success, durationMs)
+    return SmsVerifyOutcome.NotRequired
 }

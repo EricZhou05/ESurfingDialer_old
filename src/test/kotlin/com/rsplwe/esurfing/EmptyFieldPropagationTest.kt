@@ -3,7 +3,6 @@ package com.rsplwe.esurfing
 import com.rsplwe.esurfing.fixture.CanarySecrets
 import com.rsplwe.esurfing.fixture.FixtureLoader
 import com.rsplwe.esurfing.fixture.TestAuthFlow
-import org.junit.jupiter.api.Disabled
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -58,7 +57,6 @@ class EmptyFieldPropagationTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 6 validates keepRetry")
     fun keepRetry_toLong_mustNotThrowWhenMissing() {
         val result = TestAuthFlow.run(
             options(), zsm, ticketXml(),
@@ -73,7 +71,6 @@ class EmptyFieldPropagationTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 6 validates keepRetry")
     fun keepRetry_mustNotBeBlankWhenMissing() {
         val result = TestAuthFlow.run(
             options(), zsm, ticketXml(),
@@ -87,7 +84,6 @@ class EmptyFieldPropagationTest {
     }
 
     @Test
-    @Disabled("TDD red-phase: expected failure until Todo 6 validates keepRetry")
     fun keepRetry_mustNotBeBlankWhenInvalid() {
         val result = TestAuthFlow.run(
             options(), zsm, ticketXml(),
