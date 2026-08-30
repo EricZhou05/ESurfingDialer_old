@@ -78,7 +78,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 1. 建立 TDD 基线、脱敏 fixture 规范和测试工具链
+- [x] 1. 建立 TDD 基线、脱敏 fixture 规范和测试工具链
   What to do / Must NOT do: 在 `build.gradle.kts` 增加 Kotlin test/JUnit 5 和与现有 OkHttp 4.12.0 兼容的 MockWebServer 测试依赖，配置 `useJUnitPlatform()`；创建 `src/test/kotlin/` 与 `src/test/resources/fixtures/`，加入完全虚构的 portal、JSON、XML、ZSM 和 cipher 测试样本以及 canary 密码/ticket/key。先写会暴露当前非 2xx 成功误判、秘密日志、空字段传播和 malformed ZSM 的失败测试。不得使用真实账号、现场原包或升级生产依赖大版本。
   Parallelization: Wave 1 | Blocked by: - | Blocks: 2-7, 10
   References (executor has NO interview context - be exhaustive): `build.gradle.kts:1-31`; `.github/workflows/build.yml:14-24`; `src/main/kotlin/com/rsplwe/esurfing/network/NetResult.kt:1-14`; `src/main/kotlin/com/rsplwe/esurfing/Session.kt:23-58`; `src/main/kotlin/com/rsplwe/esurfing/Client.kt:62-91`.
@@ -86,7 +86,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*Fixture*' --no-daemon` 验证 fixture 可加载且字段确定；failure：运行 fixture secret scanner，向临时测试输出注入 canary password/ticket 后必须失败。Evidence `<attemptDir>/task-1-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `test(infra): establish deterministic protocol fixtures`
 
-- [ ] 2. 定义诊断事件、阶段、错误和关联标识契约
+- [x] 2. 定义诊断事件、阶段、错误和关联标识契约
   What to do / Must NOT do: 新增小型 typed diagnostics 模型，定义 `runId`、`attemptId`、`correlationId`、stage、timestamp、duration、transport/http/protocol/business result、error code、truncation 与 evidence reference；建立稳定 JSON Lines 编码和字段白名单。错误消息只保留分类和安全摘要，不序列化异常对象、请求体或凭据。避免把整个 `States` 对象或 OkHttp request/response 直接反射序列化。
   Parallelization: Wave 1 | Blocked by: 1 | Blocks: 4-7, 10
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/States.kt:6-30`; `src/main/kotlin/com/rsplwe/esurfing/network/NetResult.kt:3-13`; `src/main/kotlin/com/rsplwe/esurfing/Client.kt:27-60`; `src/main/kotlin/com/rsplwe/esurfing/utils/NetworkConnectivity.kt:19-78`.
@@ -94,7 +94,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*DiagnosticEvent*' --no-daemon` 验证顺序、ID 和 JSON round-trip；failure：构造包含异常栈、URL query、password、ticket 的输入，序列化必须脱敏或拒绝。Evidence `<attemptDir>/task-2-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `feat(diagnostics): define typed event contract`
 
-- [ ] 3. 实现分层证据存储、脱敏、清单、限额和权限
+- [x] 3. 实现分层证据存储、脱敏、清单、限额和权限
   What to do / Must NOT do: 增加可配置 diagnostics root，在每个 run 下创建 `redacted/`、`sensitive/`、`manifest.json`；默认只写 redacted JSONL，显式 sensitive 模式才允许保存原始 portal/ZSM/密文响应。对用户名、手机号、IP、MAC、schoolId 做稳定掩码，对密码、SMS、ticket、cookie、key 做完全移除；记录原始长度、保存长度、截断标记、SHA-256、stage 和关联 ID。采用原子写入，先写原件/计算 hash，再生成独立脱敏派生物，绝不原地改 raw；设单文件/单 run 限额和保留策略；Unix 上目录/文件使用受限权限，并记录 Windows/bind mount 不保证权限的残余风险。不得实现删除命令、自动上传或应用内归档加密。
   Parallelization: Wave 1 | Blocked by: 1 | Blocks: 4-10
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/Session.kt:55-79`; `src/main/resources/log4j.properties:1-11`; `.gitignore:1-24`; `src/main/kotlin/com/rsplwe/esurfing/Options.kt:3-7`; `src/main/kotlin/com/rsplwe/esurfing/cipher/KeyData.kt:3-111`.
@@ -102,7 +102,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*EvidenceStore*' --tests '*Redaction*' --no-daemon` 验证原子写、hash、权限和派生关联；failure：模拟磁盘不可写、redaction 失败和超大 payload，raw 不被覆盖且产生 typed failure。Evidence `<attemptDir>/task-3-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `feat(diagnostics): add tiered evidence storage`
 
-- [ ] 4. 重构 HTTP、重定向和门户探测为可诊断的 typed result
+- [x] 4. 重构 HTTP、重定向和门户探测为可诊断的 typed result
   What to do / Must NOT do: 让网络结果携带 stage、URL 的安全形式（scheme/host/path，移除 query/userinfo）、status、选定 headers、content type、body bytes、耗时和 redirect chain，并可靠关闭 response/body；明确区分 transport failure、非 2xx、redirect limit/missing Location、empty body、portal marker/config failure 与 internet success。门户响应无旧标记时不得仅凭 HTTP 成功判定已联网；保留现有 CDC area/school/domain 行为并测试每跳更新。正常日志不得输出完整 Location query、cookie 或 body。
   Parallelization: Wave 2 | Blocked by: 1-3 | Blocks: 10, 11
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/network/NetClient.kt:16-101`; `src/main/kotlin/com/rsplwe/esurfing/utils/NetworkConnectivity.kt:28-79`; `src/main/kotlin/com/rsplwe/esurfing/Constants.kt:7-13`.
@@ -110,7 +110,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*NetClient*' --tests '*Portal*' --no-daemon` 验证正常重定向与门户配置提取；failure：模拟 500 HTML、重定向循环和旧 tag 缺失，事件必须准确分类且不返回 `SUCCESS`。Evidence `<attemptDir>/task-4-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `fix(network): classify transport and portal outcomes`
 
-- [ ] 5. 加固 ZSM 解析、未知 Algo-ID 取证和密码回放边界
+- [x] 5. 加固 ZSM 解析、未知 Algo-ID 取证和密码回放边界
   What to do / Must NOT do: 将 ZSM 字节解析提取为可测试 parser，使用无符号长度、明确 charset/结构校验、字段范围和 trailing-byte 记录；未知 Algo-ID/malformed ZSM 返回 typed failure。移除普通日志中的 ZSM key 和公开 issue 上传提示；普通模式只记录长度、header、Algo-ID 和指纹，显式 sensitive 模式通过 EvidenceStore 保存原字节。为九种算法添加已知向量及项目协议 round-trip fixture。不得因“看起来不标准”统一 padding、修改 key/IV 或新增算法；这些变化只能在 Todo 12 有现场 mismatch 证据后进行。
   Parallelization: Wave 2 | Blocked by: 1-3 | Blocks: 10, 11
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/Session.kt:14-79`; `src/main/kotlin/com/rsplwe/esurfing/cipher/CipherFactory.kt:13-68`; `src/main/kotlin/com/rsplwe/esurfing/cipher/KeyData.kt:3-111`; `src/main/kotlin/com/rsplwe/esurfing/cipher/impl/`; `src/main/java/com/rsplwe/crypto/SM4.java`; `src/main/java/com/rsplwe/crypto/Zuc128.java`.
@@ -118,7 +118,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*Zsm*' --tests '*Cipher*' --no-daemon` 验证已知包与算法向量；failure：未知 Algo-ID 和 malformed 字节只产生 typed failure + 受控证据，不崩溃、不泄露 key。Evidence `<attemptDir>/task-5-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `fix(session): harden zsm diagnostics and replay`
 
-- [ ] 6. 建立 XML/JSON 响应契约和认证生命周期状态机
+- [x] 6. 建立 XML/JSON 响应契约和认证生命周期状态机
   What to do / Must NOT do: 为 ticket、login、heartbeat、term 和 SMS 响应定义 parse-don't-validate 风格结果，区分格式错误、缺必填字段、业务拒绝、验证码不需要/需要/查询失败。校验 `ticket`、`keep-url`、`term-url`、`keep-retry`/`interval`，为间隔定义协议兼容的正数与防高频上限；非法值进入 typed failure，不能 `toLong()` 崩溃。定义合法状态转移与每次重新授权的状态清理，确保未初始化不能 login/keep/term、失败登录不能标记 logged、heartbeat 失败进入 re-auth/degraded、term 幂等、shutdown 停止后不再发请求。不得靠空字符串和布尔值表达不同失败。
   Parallelization: Wave 2 | Blocked by: 1-3 | Blocks: 10, 11
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/Client.kt:27-235`; `src/main/kotlin/com/rsplwe/esurfing/States.kt:6-30`; `src/main/kotlin/com/rsplwe/esurfing/utils/NetworkConnectivity.kt:81-117`; `src/main/kotlin/com/rsplwe/esurfing/model/RequireVerificate.kt:5-28`.
@@ -126,7 +126,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`./gradlew test --tests '*ProtocolParser*' --tests '*AuthState*' --no-daemon` 验证完整 ticket-login-keep-term；failure：缺 ticket、500 HTML、错误验证码、interval=0/溢出和解密乱码均被阻断并分类。Evidence `<attemptDir>/task-6-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `fix(auth): enforce protocol and lifecycle contracts`
 
-- [ ] 7. 增加安全诊断 CLI、配置优先级和可靠关闭流程
+- [x] 7. 增加安全诊断 CLI、配置优先级和可靠关闭流程
   What to do / Must NOT do: 扩展命令行/环境配置以选择 diagnostics root、diagnostic mode、payload limit 和 retention；默认安全关闭 sensitive capture。为凭据提供不暴露在进程参数中的输入方式（优先受限权限文件或 stdin；保留旧 `-p` 兼容但明确警告残余风险），日志只记录配置来源而非值。关闭钩子捕获并记录所有 term/session 失败，确保 flush manifest 后退出；敏感模式启动时输出非秘密告警。不得把密码、SMS 或 raw path 打印到控制台。
   Parallelization: Wave 2 | Blocked by: 1-3 | Blocks: 8, 10, 11
   References (executor has NO interview context - be exhaustive): `src/main/kotlin/com/rsplwe/esurfing/DialerApp.kt:13-76`; `src/main/kotlin/com/rsplwe/esurfing/Options.kt:3-7`; `src/main/kotlin/com/rsplwe/esurfing/Client.kt:62-109`; `src/main/resources/log4j.properties:1-11`; `README.md:14-53`.
@@ -134,7 +134,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：使用测试凭据文件启动 replay 模式并正常关闭，检查 manifest；failure：不可写 diagnostics root、缺凭据和 term 异常必须安全失败且无秘密输出。Evidence `<attemptDir>/task-7-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `feat(cli): add safe diagnostic configuration`
 
-- [ ] 8. 提供并验证 Docker 持久化、权限和证据导出流程
+- [x] 8. 提供并验证 Docker 持久化、权限和证据导出流程
   What to do / Must NOT do: 将 README 中的示例落实为仓库内 Dockerfile/入口脚本或等价容器配置，使用 Java 23、host network 和 `/data/diagnostics` bind mount；让 UID/GID、umask 和只写指定根目录可配置。提供诊断运行、停止、`docker cp`/bind mount 导出、manifest 校验、仅 redacted 默认打包、显式 raw 导出后用 7-Zip/GPG 加密的命令。不得自动上传、删除或把密码写入镜像/命令行；如保留环境变量方式，必须清楚标明 `docker inspect` 风险并推荐 secret/file 输入。
   Parallelization: Wave 3 | Blocked by: 3, 7 | Blocks: 11
   References (executor has NO interview context - be exhaustive): `README.md:19-47`; `build.gradle.kts:1-31`; `src/main/resources/log4j.properties:7-11`; `.gitignore:1-24`.
@@ -142,7 +142,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：`docker build -t esurfing-dialer:diagnostic .` 后以 fixture 模式和 bind mount 运行两次，验证持久化；failure：只读 mount/错误 UID/无显式 sensitive 确认必须输出 typed failure 而非写到容器其他目录。Evidence `<attemptDir>/task-8-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `build(docker): persist diagnostic evidence safely`
 
-- [ ] 9. 加固 CI、产物溯源和 baseline 回滚
+- [x] 9. 加固 CI、产物溯源和 baseline 回滚
   What to do / Must NOT do: 将 CI 改为 Java 23 下执行 `clean check shadowJar --no-daemon`，上传测试报告、JAR、Git SHA/JAR SHA-256 和非敏感构建元数据；明确排除 `sensitive/`、现场 evidence 和真实 fixture。记录 baseline 与 diagnostic/repair 的版本和 hash，提供 Docker/JAR 回滚命令，并保证诊断目录向后兼容、回滚不覆盖证据。不得顺便升级生产依赖大版本。
   Parallelization: Wave 3 | Blocked by: 1, 3 | Blocks: 11, 13
   References (executor has NO interview context - be exhaustive): `.github/workflows/build.yml:1-24`; `build.gradle.kts:1-31`; `README.md:50-54`; `.gitignore:1-24`.
@@ -150,7 +150,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：构建 diagnostic 与 baseline 两个可识别 artifact 并核验 hash；failure：注入失败测试和 sensitive canary，CI 等价检查必须分别阻断发布和 artifact 收集。Evidence `<attemptDir>/task-9-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `ci: verify tests provenance and rollback artifacts`
 
-- [ ] 10. 运行完整离线故障矩阵和秘密泄露回归
+- [x] 10. 运行完整离线故障矩阵和秘密泄露回归【范围调整：按用户指示停止秘密扫描/脱敏专项，仅保留构建+全量测试验证 281/0/0】
   What to do / Must NOT do: 集成 Todo 4-7 的 MockWebServer/fixture 流程，覆盖 DNS/连接/读写超时、redirect、HTTP 状态、portal 结构、SMS、ZSM、未知算法、密文格式、XML 业务字段、状态清理、心跳和 term；验证每个输入仅落入预期 stage/outcome。对 console、log、redacted evidence、test report、JAR 资源和拟上传 CI artifact 做 canary secret 扫描。不得把 `sensitive/` 当作普通测试输出，也不得以 grep 日志文案替代行为断言。
   Parallelization: Wave 3 | Blocked by: 4-7 | Blocks: 11
   References (executor has NO interview context - be exhaustive): Todo 4-7 的全部实现与测试；`src/main/kotlin/com/rsplwe/esurfing/Client.kt`; `src/main/kotlin/com/rsplwe/esurfing/network/NetClient.kt`; `src/main/kotlin/com/rsplwe/esurfing/utils/NetworkConnectivity.kt`; `src/main/kotlin/com/rsplwe/esurfing/Session.kt`.
@@ -158,7 +158,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：执行完整正常认证 replay，得到 transport/protocol/business success 和连续 heartbeat；failure：执行全部 malformed/non-2xx/unknown-algo fixture，均返回对应 failure 且无崩溃。Evidence `<attemptDir>/task-10-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `test: cover end-to-end diagnostic failure matrix`
 
-- [ ] 11. 构建诊断版本并完成第一次真实校园网取证
+- [~] 11. 构建诊断版本并完成第一次真实校园网取证【BLOCKED：需要用户在真实校园网现场执行 + 授权账号 + 用户明确指示严禁自动触发；实测指南与前置检查清单已输出，等待用户现场取证后回传证据】
   What to do / Must NOT do: 构建带 Git SHA/JAR SHA-256 的 diagnostic artifact，生成一份机器可读现场前置清单：授权账号、真实校园网、host network、时间同步、可写 bind mount、外部加密工具和 sensitive capture 明确同意。使用凭据文件/stdin 启动，记录 runId、版本、配置摘要、网络摘要、每阶段结果和 manifest；保持运行直到失败重现，或完成至少三次心跳后受控停止。由具备现场访问能力的执行环境运行固定命令；若当前 worker 无法访问该网络或前置条件不全，输出 `BLOCKED` 和准确命令/缺失项，等待用户提供加密证据后从本任务继续，不得跳到 Todo 12。
   Parallelization: Wave 4 | Blocked by: 8-10 | Blocks: 12
   References (executor has NO interview context - be exhaustive): Todo 7 的 CLI；Todo 8 的 Docker/导出命令；Todo 9 的 artifact provenance；Todo 10 的成功契约；`.omo/drafts/esurfing-diagnostics-and-repair.md` 的 evidence policy。
@@ -166,7 +166,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：按 Todo 8 文档用 diagnostic image + bind mount 运行并导出，审计三个成功层次；failure：网络不可达、未知 Algo-ID、解密/XML/业务失败时必须产生可归因事件和受控原件，或明确 `BLOCKED`。Evidence `<attemptDir>/task-11-esurfing-diagnostics-and-repair.txt` 加现场 manifest/脱敏副本。
   Commit: N | 现场证据不得提交；仅在必要时提交不含现场数据的 runbook 修正
 
-- [ ] 12. 将现场失败固化为回放测试并实施证据支持的最小修复
+- [~] 12. 将现场失败固化为回放测试并实施证据支持的最小修复【BLOCKED：依赖 Todo 11 现场失败证据；用户实测回传证据后解除】
   What to do / Must NOT do: 验证 Todo 11 原件 hash，在本地受控位置解析，生成不可逆脱敏 fixture 和失败断言；先证明当前版本对该 fixture 失败。按分类矩阵处理：portal/endpoint/header 变化修改发现/请求契约；HTTP/redirect 修改网络层；XML/JSON/业务字段修改 parser/state；已知算法输出 mismatch 才修改对应实现；未知 Algo-ID 仅在能够从授权官方客户端/库或充分输入输出样本证明算法和 key/IV 时新增映射。每个生产改动记录 evidence reference、排除的替代假设、修复前后差异。证据只证明服务端拒绝但无法解释算法时必须 `BLOCKED` 并列出所需官方 APK/so、更多样本或抓取点，不得猜算法。
   Parallelization: Wave 5 | Blocked by: 11 | Blocks: 13
   References (executor has NO interview context - be exhaustive): Todo 11 的受控 manifest；`src/main/kotlin/com/rsplwe/esurfing/network/NetClient.kt`; `src/main/kotlin/com/rsplwe/esurfing/utils/NetworkConnectivity.kt`; `src/main/kotlin/com/rsplwe/esurfing/Session.kt`; `src/main/kotlin/com/rsplwe/esurfing/Client.kt`; `src/main/kotlin/com/rsplwe/esurfing/cipher/`.
@@ -174,7 +174,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：运行新现场 fixture 的定向测试后再执行 `./gradlew clean check shadowJar --no-daemon`；failure：移除/反转修复时定向测试必须重新失败，证明确实锁定根因而非偶然通过。Evidence `<attemptDir>/task-12-esurfing-diagnostics-and-repair.txt`。
   Commit: Y | `fix(protocol): repair evidence-confirmed authentication failure`
 
-- [ ] 13. 完成修复版本真实网络验证和可执行回滚演练
+- [~] 13. 完成修复版本真实网络验证和可执行回滚演练【BLOCKED：依赖 Todo 9 与 Todo 12（Todo 12 又依赖 Todo 11 现场证据）；用户实测回传证据后解除】
   What to do / Must NOT do: 用与 Todo 11 相同账号、校园网络、容器网络、诊断配置和可比较时间窗口运行 repair artifact；比较 baseline/diagnostic 与 repair 的 app/Git/JAR identity、Algo-ID、阶段结果和 manifest。要求登录三层成功、连续心跳达到门槛、term 完成或明确安全失败、无未分类异常/秘密泄露。随后切回 baseline artifact，验证可启动/停止、诊断 evidence 不被覆盖，再恢复 repair artifact 并复验。现场条件不一致必须记录差异，不能伪装为 A/B 证明。
   Parallelization: Wave 6 | Blocked by: 9, 12 | Blocks: 14
   References (executor has NO interview context - be exhaustive): Todo 9 的版本/回滚命令；Todo 11 的 baseline field manifest；Todo 12 的 root-cause fixture；Todo 8 的 Docker 持久化配置。
@@ -182,7 +182,7 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
   QA scenarios (name the exact tool + invocation): happy：按固定 Docker 命令运行 repair、rollback baseline、再部署 repair，并用 manifest auditor 比较；failure：故意部署错误 hash/只读 mount，provenance/写入检查必须阻断验证。Evidence `<attemptDir>/task-13-esurfing-diagnostics-and-repair.txt` 加三次 run manifest。
   Commit: N | 现场 evidence 不提交；必要的非敏感部署修正另行原子提交
 
-- [ ] 14. 完成运维文档、根因报告和安全交付清单
+- [~] 14. 完成运维文档、根因报告和安全交付清单【BLOCKED：依赖 Todo 13（级联依赖 Todo 11 现场证据）；用户实测回传证据后解除】
   What to do / Must NOT do: 更新 README/诊断文档，覆盖安全凭据输入、Docker 构建运行、diagnostic mode、目录布局、权限、默认 redacted 导出、raw 显式导出、7-Zip/GPG 外部加密、hash 校验、保留/人工销毁责任、字段解释、常见 failure code、两阶段排查和回滚。生成根因报告，引用 Todo 11/12/13 的 runId 与 hash，但不嵌入原始秘密；明确已修复根因、排除项、残余风险和新协议再次变化时的采集步骤。
   Parallelization: Wave 6 | Blocked by: 13 | Blocks: F1-F4
   References (executor has NO interview context - be exhaustive): `README.md:1-54`; Todo 3 的 evidence contract；Todo 7 的 CLI；Todo 8 的 Docker/runbook；Todo 9 的 provenance/rollback；Todo 11-13 的脱敏报告。
@@ -192,10 +192,10 @@ Your next move: 在独立工作会话中执行 `$start-work esurfing-diagnostics
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit：读取 Todo 1-14 的 evidence、命令退出码、测试名称、commit/JAR SHA 和现场 manifest，逐条核对 Must have；缺任一证据或存在 `BLOCKED` 时返回 FAIL。Evidence `<attemptDir>/final-f1-plan-compliance.md`。
-- [ ] F2. Code quality and security audit：运行 `./gradlew clean check shadowJar --no-daemon`、秘密扫描、资源泄漏与依赖 diff 审计；检查 typed result 穷尽性、异常不被吞、证据原子性和敏感目录隔离。Evidence `<attemptDir>/final-f2-quality-security.md`。
-- [ ] F3. Real-network evidence audit：只读取 Todo 11/13 的脱敏事件与签名清单，验证运行身份可比、原失败可复现、修复后登录三层成功、连续心跳达标、term/rollback 有证据；不得依赖人工口头确认。Evidence `<attemptDir>/final-f3-field-evidence.md`。
-- [ ] F4. Scope fidelity audit：审计最终 diff、依赖和 artifact 内容，确认未引入模拟器、Python companion、自动上传、应用内归档加密、默认抓包、未经证据支持的 crypto 改写或敏感 CI artifact。Evidence `<attemptDir>/final-f4-scope.md`。
+- [~] F1. Plan compliance audit【BLOCKED：Todo 11-14 均 BLOCKED，存在 BLOCKED 即 FAIL；等待用户实测回传证据】。Evidence `<attemptDir>/final-f1-plan-compliance.md`。
+- [~] F2. Code quality and security audit【按用户策略调整：秘密扫描/保密工程已叫停；quality 基线已由 ./gradlew clean check shadowJar 281/0/0 覆盖；等待用户实测后再定】。Evidence `<attemptDir>/final-f2-quality-security.md`。
+- [~] F3. Real-network evidence audit【BLOCKED：Todo 11/13 未执行（需真实校园网现场证据），无法审计运行身份/复现/心跳达标】。Evidence `<attemptDir>/final-f3-field-evidence.md`。
+- [~] F4. Scope fidelity audit【按用户策略调整：保密交付清单已简化；等待用户实测后再定】。Evidence `<attemptDir>/final-f4-scope.md`。
 
 ## Commit strategy
 - 每个 Todo 按其 `Commit` 行形成原子提交；测试与对应实现放在同一提交中，TDD 的修复前失败证据保存在 `.omo/evidence/` 而不是提交失败状态。

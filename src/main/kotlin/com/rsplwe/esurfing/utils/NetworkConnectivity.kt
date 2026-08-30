@@ -15,6 +15,7 @@ import com.rsplwe.esurfing.model.RequireVerificate
 import com.rsplwe.esurfing.model.ResponseRequireVerificate
 import com.rsplwe.esurfing.network.NetDiagnostics
 import com.rsplwe.esurfing.network.NetErrorCode
+import com.rsplwe.esurfing.network.RedirectHop
 import com.rsplwe.esurfing.network.RedirectInterceptor
 import com.rsplwe.esurfing.network.RedirectProtocolException
 import com.rsplwe.esurfing.network.apiClient
@@ -25,6 +26,7 @@ import com.rsplwe.esurfing.network.elapsedMillis
 import com.rsplwe.esurfing.network.safeUrlOf
 import com.rsplwe.esurfing.protocol.SmsQueryFailure
 import com.rsplwe.esurfing.protocol.SmsVerifyOutcome
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -59,7 +61,7 @@ fun detectConfig(): ConnectivityStatus {
     val startNanos = System.nanoTime()
     val request = Request.Builder()
         .removeHeader("User-Agent")
-        .addHeader("User-Agent", Constants.USER_AGENT)
+        .addHeader("User-Agent", Constants.CAPTIVE_USER_AGENT)
         .addHeader("Accept", Constants.REQUEST_ACCEPT)
         .addHeader("Client-ID", States.clientId)
         .url(Constants.CAPTIVE_URL)
@@ -83,7 +85,7 @@ fun detectConfig(): ConnectivityStatus {
             val content = response.body!!.string()
             response!!.close()
             response = null
-            classifyPortalBody(content, stage, durationMs)
+            classifyPortalBody(content, chain, stage, durationMs)
         }
     } catch (e: Throwable) {
         classifyFailure(e, stage, safeTarget, elapsedMillis(startNanos))
@@ -95,9 +97,23 @@ fun detectConfig(): ConnectivityStatus {
     }
 }
 
-private fun classifyPortalBody(content: String, stage: DiagnosticStage, durationMs: Long): ConnectivityStatus {
+internal fun classifyPortalBody(
+    content: String,
+    chain: List<RedirectHop>,
+    stage: DiagnosticStage,
+    durationMs: Long,
+): ConnectivityStatus {
     val portalConfig = content.extractBetweenTags(Constants.PORTAL_START_TAG, Constants.PORTAL_END_TAG)
     if (portalConfig.isEmpty()) {
+        if (chain.any { isKnownPortalDomain(it.safeLocation) }) {
+            NetDiagnostics.record(
+                stage,
+                ProtocolResult.Failure(ProtocolErrorCode.PORTAL_DETECTED_BY_DOMAIN, "portal_detected_by_known_domain"),
+                durationMs,
+            )
+            logger.warn("Portal detect: known portal domain hit in redirect chain")
+            return ConnectivityStatus.REQUIRE_AUTHORIZATION
+        }
         NetDiagnostics.record(
             stage,
             ProtocolResult.Failure(ProtocolErrorCode.MISSING_FIELD, "portal_config_tag_missing"),
@@ -142,6 +158,20 @@ private fun classifyPortalBody(content: String, stage: DiagnosticStage, duration
     States.acIp = acIp!!
     NetDiagnostics.record(stage, HttpResult.Success, durationMs)
     return ConnectivityStatus.REQUIRE_AUTHORIZATION
+}
+
+/**
+ * Known China Telecom portal hosts. When the portal server answers through a
+ * redirect chain targeted at one of these hosts but the body carries no
+ * portal-config marker, the host name alone proves we landed on the captive
+ * portal — so the probe must report REQUIRE_AUTHORIZATION instead of an
+ * error. The list is intentionally small and versioned per contract.
+ */
+private val KNOWN_PORTAL_HOSTS = setOf("enet.10000.gd.cn")
+
+fun isKnownPortalDomain(url: String): Boolean {
+    val host = url.toHttpUrlOrNull()?.host ?: return false
+    return KNOWN_PORTAL_HOSTS.any { host == it || host.endsWith(".$it") }
 }
 
 fun checkVerifyCodeStatus(username: String): SmsVerifyOutcome {

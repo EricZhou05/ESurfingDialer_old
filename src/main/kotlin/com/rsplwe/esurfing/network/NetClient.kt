@@ -64,6 +64,9 @@ class RedirectInterceptor : Interceptor {
             logger.info(
                 "Redirect #${hops.size + 1}: ${response.code} -> $safeTarget"
             )
+            logger.debug(
+                "Redirect #${hops.size + 1} raw Location: $location"
+            )
             hops += RedirectHop(
                 safeLocation = safeTarget,
                 status = response.code,

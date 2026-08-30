@@ -40,7 +40,8 @@ enum class ProtocolErrorCode(override val code: String) : ErrorCode {
     DECRYPT("protocol.decrypt"),
     XML_MALFORMED("protocol.xml_malformed"),
     MISSING_FIELD("protocol.missing_field"),
-    INVALID_VALUE("protocol.invalid_value");
+    INVALID_VALUE("protocol.invalid_value"),
+    PORTAL_DETECTED_BY_DOMAIN("protocol.portal_detected_by_domain");
 
     companion object {
         fun fromCode(code: String): ProtocolErrorCode? = entries.firstOrNull { it.code == code }

@@ -2,7 +2,9 @@ package com.rsplwe.esurfing.utils
 
 import com.rsplwe.esurfing.Constants
 import com.rsplwe.esurfing.States
+import com.rsplwe.esurfing.diagnostics.DiagnosticStage
 import com.rsplwe.esurfing.network.NetDiagnostics
+import com.rsplwe.esurfing.network.RedirectHop
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
@@ -159,5 +161,27 @@ class PortalDetectTest {
         assertEquals("portal-area", States.area, "redirect hop must update area")
         assertEquals("portal-school", States.schoolId)
         assertEquals("portal.example.invalid", States.domain)
+    }
+
+    @Test
+    fun redirectToKnownPortalDomain_returnsRequireAuthorization() {
+        val chain = listOf(
+            RedirectHop(safeLocation = "http://enet.10000.gd.cn:10001/", status = 302, area = null, schoolId = null, domain = null)
+        )
+        val body = "<!DOCTYPE html><html><body><h1>InvalidArguments!</h1></body></html>"
+        val status = classifyPortalBody(body, chain, DiagnosticStage.PORTAL, 0L)
+        assertEquals(ConnectivityStatus.REQUIRE_AUTHORIZATION, status)
+        assertEquals("protocol.portal_detected_by_domain", lastEventCode())
+    }
+
+    @Test
+    fun redirectToUnrelatedDomain_withoutMarker_isRequestError() {
+        val chain = listOf(
+            RedirectHop(safeLocation = "http://captive.portal.invalid/", status = 302, area = null, schoolId = null, domain = null)
+        )
+        val body = markerMissingBody()
+        val status = classifyPortalBody(body, chain, DiagnosticStage.PORTAL, 0L)
+        assertEquals(ConnectivityStatus.REQUEST_ERROR, status)
+        assertEquals("protocol.missing_field", lastEventCode())
     }
 }
