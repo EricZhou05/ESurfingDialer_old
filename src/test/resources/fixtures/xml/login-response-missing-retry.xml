@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. keep-url/term-url present but keep-retry MISSING,
+     to exercise empty keep-retry propagation (Client.kt:171-173) and the
+     keepRetry.toLong() crash path (Client.kt:34). -->
+<response>
+    <result>success</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+</response>

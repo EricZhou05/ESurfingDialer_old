@@ -20,10 +20,18 @@ dependencies {
     implementation("commons-codec:commons-codec:1.18.0")
     implementation("org.jsoup:jsoup:1.21.1")
     implementation("com.google.code.gson:gson:2.13.1")
+
+    testImplementation(kotlin("test-junit5"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 kotlin {
     jvmToolchain(23)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 application {

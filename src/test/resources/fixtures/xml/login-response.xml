@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY -- not real field data. -->
+<response>
+    <result>success</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>30</keep-retry>
+</response>

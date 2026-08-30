@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. keep-retry is NON-NUMERIC ('abc') to exercise the
+     keepRetry.toLong() crash path (Client.kt:34). -->
+<response>
+    <result>success</result>
+    <keep-url>http://fixture.example.invalid/portal/keep</keep-url>
+    <term-url>http://fixture.example.invalid/portal/term</term-url>
+    <keep-retry>abc</keep-retry>
+</response>

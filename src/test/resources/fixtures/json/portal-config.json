@@ -1,0 +1,19 @@
+{
+  "schema": "esurfing-diagnostics/fixture/v1",
+  "fictitious": true,
+  "generatedFor": "tests-only",
+  "network": {
+    "userIp": "192.0.2.123",
+    "acIp": "192.0.2.1",
+    "mac": "AA:BB:CC:DD:EE:FF"
+  },
+  "endpoints": {
+    "ticketUrl": "http://fixture.example.invalid/portal/ticket",
+    "authUrl": "http://fixture.example.invalid/portal/auth",
+    "keepUrl": "http://fixture.example.invalid/portal/keep"
+  },
+  "expectedFields": {
+    "ticket": "FIXTURE_TICKET_0000000000000000",
+    "keepRetry": 30
+  }
+}

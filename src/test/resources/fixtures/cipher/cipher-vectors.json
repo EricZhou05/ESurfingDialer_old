@@ -1,0 +1,24 @@
+{
+  "schema": "esurfing-diagnostics/cipher-vector/v1",
+  "fictitious": true,
+  "generatedFor": "tests-only",
+  "comment": "Fully fictitious cipher vectors. Keys/IVs below are made-up test data and are NOT usable against any real campus network. They deliberately differ from every real key/IV in cipher/KeyData.kt.",
+  "vectors": [
+    {
+      "algoId": "CAFBCBAD-B6E7-4CAB-8A67-14D39F00CE1E",
+      "algo": "AES/CBC/NoPadding",
+      "key1Hex": "101112131415161718191a1b1c1d1e1f",
+      "key2Hex": "202122232425262728292a2b2c2d2e2f",
+      "ivHex": "303132333435363738393a3b3c3d3e3f",
+      "plaintextHex": "46494354494f4e414c2d504c41494e54"
+    },
+    {
+      "algoId": "A474B1C2-3DE0-4EA2-8C5F-7093409CE6C4",
+      "algo": "AES/ECB/NoPadding",
+      "key1Hex": "404142434445464748494a4b4c4d4e4f",
+      "key2Hex": "505152535455565758595a5b5c5d5e5f",
+      "ivHex": "",
+      "plaintextHex": "46494354494f4e414c2d504c41494e54"
+    }
+  ]
+}

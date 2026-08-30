@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FICTIONAL FIXTURE ONLY. Deliberately MISSING keep-url/term-url/keep-retry to
+     exercise empty-field propagation defect (Client.login lines 171-173). -->
+<response>
+    <result>success</result>
+</response>
