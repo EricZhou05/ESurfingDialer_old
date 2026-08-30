@@ -1,16 +1,42 @@
-# Compiled class file
-*.class
+# ===== Gradle / Kotlin =====
+.gradle/
+build/
+.kotlin/
 
-# Log file
+# ===== 构建产物（通用） =====
+out/
+
+# ===== IDE 配置 =====
+.idea/
+.vscode/
+.fleet/
+*.iml
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
+
+# ===== 环境 / 运行 =====
+.env
+.env.*
+logs/
+run/
+
+# ===== Java =====
+*.class
+hs_err_pid*
+replay_pid*
+
+# ===== 日志 =====
 *.log
 
-# BlueJ files
+# ===== BlueJ =====
 *.ctxt
 
-# Mobile Tools for Java (J2ME)
+# ===== Mobile Tools for Java (J2ME) =====
 .mtj.tmp/
 
-# Package Files #
+# ===== 包文件 =====
 *.jar
 *.war
 *.nar
@@ -19,14 +45,12 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# ===== 通用 Maven 产物 =====
+target/
 
-# Agent plans whitelist (.omo/plans is tracked, others ignored)
+# @see http://www.java.com/en/download/help/error_hotspot.xml
+
+# ===== Agent 计划文件白名单（.omo/plans 必须保持可追踪） =====
 .omo/*
 !.omo/plans/
 !.omo/plans/**
-
-# User-specific stuff
-.idea/*
