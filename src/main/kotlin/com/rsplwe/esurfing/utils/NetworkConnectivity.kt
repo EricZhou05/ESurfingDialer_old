@@ -67,10 +67,11 @@ fun detectConfig(): ConnectivityStatus {
         .url(Constants.CAPTIVE_URL)
         .build()
     var response: Response? = null
+    var chain: List<RedirectHop> = emptyList()
     return try {
         response = captiveClient.newCall(request).execute()
         val durationMs = elapsedMillis(startNanos)
-        val chain = RedirectInterceptor.takeChain()
+        chain = RedirectInterceptor.takeChain()
         val record = buildExchangeRecord(stage, safeTarget, response, durationMs, chain)
 
         if (!response.isSuccessful) {
@@ -90,8 +91,13 @@ fun detectConfig(): ConnectivityStatus {
     } catch (e: Throwable) {
         classifyFailure(e, stage, safeTarget, elapsedMillis(startNanos))
         val label = if (e is RedirectProtocolException) e.kind.name else e.javaClass.simpleName
-        logger.error("Portal detect failed: $label")
-        ConnectivityStatus.REQUEST_ERROR
+        if (chain.any { isKnownPortalDomain(it.safeLocation) }) {
+            logger.warn("Portal detect: known portal domain despite exception ($label)")
+            ConnectivityStatus.REQUIRE_AUTHORIZATION
+        } else {
+            logger.error("Portal detect failed: $label")
+            ConnectivityStatus.REQUEST_ERROR
+        }
     } finally {
         response?.close()
     }
