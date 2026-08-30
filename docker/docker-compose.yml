@@ -1,0 +1,40 @@
+# ESurfingDialer 诊断工具 —— iStoreOS 部署 Compose 文件
+#
+# 适用镜像：esurfing-dialer:diagnostic（本机构建后 docker save→scp→路由器 docker load）
+# 目标设备：iStoreOS（OpenWRT 底层）。host 网络必需，见 docker/README.md 第 2/10 节。
+#
+# ⚠️ 磁盘红线（务必阅读）：
+#   本文件所有卷路径只允许指向数据盘 /mnt/sata1-4（sda4，12.37GB）。
+#   绝不可改到 sda3（2GB 系统 overlay，Docker 根 /opt/docker 在其上）——
+#   证据/密码一旦落上 overlay 会迅速撑爆系统盘，设备起不来。
+# ⚠️ 启动前必须先创建密码文件（0600）：
+#   /mnt/sata1-4/docker/esurfing-dialer/config/pw   （详见 docs/istoreos-deploy.md 步骤 4）
+#
+# 用法：
+#   export ESURFING_USER='<你的账号>'
+#   docker compose -f docker/docker-compose.yml up -d
+# 停止/重启/更新/卸载：见 docs/istoreos-deploy.md 步骤 8。
+
+services:
+  esurfing-dialer:
+    image: esurfing-dialer:diagnostic
+    container_name: esurfing-dialer
+    # OpenWRT/iStoreOS 下必须 host 网络，否则无法到达校园网认证门户
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # 登录账号（非密钥）——经 compose 传给 entrypoint 兜底；
+      # 密码绝不进环境变量/命令行，只走下方只读挂载的密码文件。
+      ESURFING_USER: "${ESURFING_USER}"
+    volumes:
+      # 诊断证据根 → 数据盘 sda4（绝不可改到 sda3 系统盘）
+      - /mnt/sata1-4/docker/esurfing-dialer/diagnostics:/data/diagnostics
+      # 密码文件（必须已存在且 0600）→ /run/secrets/pw，:ro 只读挂载
+      - /mnt/sata1-4/docker/esurfing-dialer/config/pw:/run/secrets/pw:ro
+    command:
+      - -u
+      - "${ESURFING_USER}"
+      - --password-file
+      - /run/secrets/pw
+      - --diagnostics-root
+      - /data/diagnostics
