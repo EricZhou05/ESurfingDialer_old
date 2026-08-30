@@ -1,0 +1,27 @@
+# Build context 排除项 —— 只保留 Dockerfile 需要的产物
+# （build/libs/*-all.jar，由 shadowJar 生成）。
+.git
+.gradle
+.idea
+.kotlin
+.omo
+logs
+imgs
+src
+gradle
+gradle.properties
+gradlew
+gradlew.bat
+build.gradle.kts
+settings.gradle.kts
+LICENSE
+*.log
+hs_err_pid*
+build/classes
+build/kotlin
+build/reports
+build/test-results
+build/tmp
+build/scripts
+build/distributions
+build/install

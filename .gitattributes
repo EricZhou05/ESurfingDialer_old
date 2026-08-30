@@ -1,0 +1,7 @@
+# CRLF 会破坏容器/脚本资产：*.sh 需要 shebang，Dockerfile 的 COPY 不关心
+# 但 shell 解析 `\r` 会炸。强制 LF。
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+docker-entrypoint.sh text eol=lf
+*.sh text eol=lf
+.dockerignore text eol=lf
