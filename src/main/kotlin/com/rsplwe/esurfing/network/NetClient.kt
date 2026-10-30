@@ -76,12 +76,13 @@ class RedirectInterceptor : Interceptor {
             )
 
             val toClose = response
-            try {
-                request = request.newBuilder().url(location).build()
-                response = chain.proceed(request)
-            } finally {
-                toClose.close()
-            }
+            // OkHttp keeps responseBodyOpen=true while a response body is unread.
+            // Re-proceeding before closing the previous 302 throws
+            // IllegalStateException("cannot make a new request because the previous
+            // response is still open"), so the redirect-follow must close it first.
+            request = request.newBuilder().url(location).build()
+            toClose.close()
+            response = chain.proceed(request)
         }
         return response
     }

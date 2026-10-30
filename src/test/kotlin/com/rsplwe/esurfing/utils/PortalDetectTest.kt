@@ -5,6 +5,8 @@ import com.rsplwe.esurfing.States
 import com.rsplwe.esurfing.diagnostics.DiagnosticStage
 import com.rsplwe.esurfing.network.NetDiagnostics
 import com.rsplwe.esurfing.network.RedirectHop
+import com.rsplwe.esurfing.network.createHttpClient
+import okhttp3.Interceptor
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
@@ -183,5 +185,84 @@ class PortalDetectTest {
         val status = classifyPortalBody(body, chain, DiagnosticStage.PORTAL, 0L)
         assertEquals(ConnectivityStatus.REQUEST_ERROR, status)
         assertEquals("protocol.missing_field", lastEventCode())
+    }
+
+    /**
+     * Regression for the production failure reported on iStoreOS:
+     *
+     *   Redirect #1: 302 -> http://enet.10000.gd.cn:10001/
+     *   Portal detect failed: IllegalStateException
+     *
+     * The 302's Location points at the known GD portal; the follow-up request
+     * (which the interceptor makes before takeChain() runs) throws
+     * IllegalStateException. The redirect hop WAS recorded, so the probe must
+     * still report REQUIRE_AUTHORIZATION — not REQUEST_ERROR. This asserts the
+     * exact path the two earlier fixes (f1ee570, bc77c52) missed: an exception
+     * thrown inside execute(), i.e. before chain = takeChain() had run.
+     */
+    /**
+     * Regression for the production failure reported on iStoreOS:
+     *
+     *   Redirect #1: 302 -> http://enet.10000.gd.cn:10001/
+     *   Portal detect: known portal domain despite exception (IllegalStateException)
+     *   SMS verification query failed: sms_endpoint_missing
+     *
+     * The 302 from connect.rom.miui.com carries a BODY (a redirect page), so
+     * OkHttp keeps the previous response body OPEN when the RedirectInterceptor
+     * follows the Location. RealCall.enterNetworkInterceptorExchange then throws
+     * `IllegalStateException: cannot make a new request because the previous
+     * response is still open: please call response.close()` on the SECOND
+     * chain.proceed(). The portal page body is never read, so auth-url /
+     * ticket-url / funcfg stay empty and the SMS endpoint lookup fails with
+     * sms_endpoint_missing. All earlier tests were false negatives because
+     * MockWebServer 302s carried no body (contentLength 0 => already closed).
+     */
+    @Test
+    fun redirect302WithBody_toPortal_thenFollowReadsPortalConfig() {
+        server!!.enqueue(
+            MockResponse().setResponseCode(302)
+                .addHeader("Location", server!!.url("/portal").toString())
+                .setBody("<html><body>redirecting...</body></html>")
+        )
+        val ticketUrl = server!!.url("/ticket?wlanuserip=1.2.3.4&wlanacip=5.6.7.8").toString()
+        server!!.enqueue(MockResponse().setResponseCode(200).setBody(portalBodyWith(ticketUrl)))
+        val status = detectConfig()
+        assertEquals(ConnectivityStatus.REQUIRE_AUTHORIZATION, status)
+        assertEquals("http://10.99.98.97/portal/auth", States.authUrl)
+        assertEquals(ticketUrl, States.ticketUrl)
+        assertEquals("1.2.3.4", States.userIp)
+        assertEquals("5.6.7.8", States.acIp)
+    }
+
+    @Test
+    fun redirectToKnownPortalDomain_whenRedirectFollowThrows_isRequireAuthorization() {
+        server!!.enqueue(
+            MockResponse().setResponseCode(302)
+                .addHeader(
+                    "Location",
+                    "http://enet.10000.gd.cn:10001/?wlanuserip=10.207.121.16&wlanacip=61.142.108.88",
+                )
+        )
+        val originalClient = captiveClient
+        try {
+            captiveClient = createHttpClient().newBuilder()
+                .addInterceptor(
+                    Interceptor { chain ->
+                        if (chain.request().url.host == "enet.10000.gd.cn") {
+                            throw IllegalStateException("simulated: body read failed while following redirect")
+                        }
+                        chain.proceed(chain.request())
+                    }
+                )
+                .build()
+            val status = detectConfig()
+            assertEquals(
+                ConnectivityStatus.REQUIRE_AUTHORIZATION,
+                status,
+                "redirect chain hitting a known portal domain must survive an execute()-internal exception",
+            )
+        } finally {
+            captiveClient = originalClient
+        }
     }
 }

@@ -42,7 +42,8 @@ enum class ConnectivityStatus {
     REQUEST_ERROR,
 }
 
-val captiveClient = createHttpClient()
+@Volatile
+var captiveClient = createHttpClient()
 val logger: Logger = Logger.getLogger("ConnectivityStatus")
 
 /**
@@ -89,9 +90,14 @@ fun detectConfig(): ConnectivityStatus {
             classifyPortalBody(content, chain, stage, durationMs)
         }
     } catch (e: Throwable) {
-        classifyFailure(e, stage, safeTarget, elapsedMillis(startNanos))
+        val elapsed = elapsedMillis(startNanos)
+        // When execute() itself throws (e.g. the redirect-follow request fails),
+        // `chain = takeChain()` above never ran — the hops still sit in the
+        // interceptor's ThreadLocal. Grab them before classifyFailure clears it.
+        val residual = if (chain.isEmpty()) RedirectInterceptor.takeChain() else chain
+        classifyFailure(e, stage, safeTarget, elapsed, existingChain = residual)
         val label = if (e is RedirectProtocolException) e.kind.name else e.javaClass.simpleName
-        if (chain.any { isKnownPortalDomain(it.safeLocation) }) {
+        if (residual.any { isKnownPortalDomain(it.safeLocation) }) {
             logger.warn("Portal detect: known portal domain despite exception ($label)")
             ConnectivityStatus.REQUIRE_AUTHORIZATION
         } else {

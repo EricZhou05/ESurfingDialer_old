@@ -84,8 +84,9 @@ fun classifyFailure(
     stage: DiagnosticStage,
     safeUrl: String,
     durationMs: Long,
+    existingChain: List<RedirectHop>? = null,
 ): NetResult<Nothing> {
-    val chain = RedirectInterceptor.takeChain()
+    val chain = existingChain ?: RedirectInterceptor.takeChain()
     val record = HttpExchangeRecord(
         stage = stage,
         safeUrl = safeUrl,
